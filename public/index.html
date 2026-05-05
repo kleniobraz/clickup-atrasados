@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ClickUp Atrasados</title>
+  <meta name="description" content="Painel de tarefas atrasadas do ClickUp: visualize, arquive e reagende em tempo real." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- Setup Banner (mostrado quando .env não está configurado) -->
+  <div id="setup-banner" class="setup-banner hidden">
+    <span>⚙️ Configure <code>CLICKUP_API_TOKEN</code> e <code>CLICKUP_LIST_ID</code> no arquivo <code>.env</code> e reinicie o servidor.</span>
+    <a href="https://clickup.com/api/clickupreference/operation/GetAuthorizedTeams/" target="_blank" rel="noopener">Documentação ClickUp →</a>
+  </div>
+
+  <!-- Header -->
+  <header class="header">
+    <div class="header__inner">
+      <div class="header__brand">
+        <div class="header__logo">
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none" aria-hidden="true">
+            <rect width="28" height="28" rx="8" fill="url(#hgrad)"/>
+            <path d="M7 17 L11 12 L14 15 L17 10 L21 17" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+            <defs>
+              <linearGradient id="hgrad" x1="0" y1="0" x2="28" y2="28" gradientUnits="userSpaceOnUse">
+                <stop stop-color="#7B61FF"/>
+                <stop offset="1" stop-color="#FF6B6B"/>
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+        <div>
+          <h1 class="header__title">Tarefas Atrasadas</h1>
+          <p class="header__subtitle">ClickUp · Painel de Controle</p>
+        </div>
+      </div>
+      <div class="header__actions">
+        <span id="last-updated" class="last-updated"></span>
+        <button id="btn-refresh" class="btn btn--icon" title="Recarregar tarefas" aria-label="Recarregar">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="23 4 23 10 17 10"></polyline>
+            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Stats -->
+  <section class="stats-bar" aria-label="Resumo">
+    <div class="stat-card">
+      <span class="stat-card__value" id="stat-total">—</span>
+      <span class="stat-card__label">Total atrasadas</span>
+    </div>
+    <div class="stat-card stat-card--urgent">
+      <span class="stat-card__value" id="stat-today">—</span>
+      <span class="stat-card__label">Venceram hoje</span>
+    </div>
+    <div class="stat-card stat-card--warn">
+      <span class="stat-card__value" id="stat-week">—</span>
+      <span class="stat-card__label">1 – 7 dias</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-card__value" id="stat-old">—</span>
+      <span class="stat-card__label">Mais de 7 dias</span>
+    </div>
+  </section>
+
+  <!-- Filters -->
+  <section class="filters" aria-label="Filtros">
+    <div class="filters__row">
+      <div class="search-box">
+        <svg class="search-box__icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <input id="search-input" type="search" class="search-box__input" placeholder="Buscar por título…" aria-label="Buscar tarefas" />
+      </div>
+
+      <select id="filter-assignee" class="filter-select" aria-label="Filtrar por responsável">
+        <option value="">Todos os responsáveis</option>
+      </select>
+
+      <div class="multi-select-container" id="empresa-filter-container">
+        <button id="btn-empresa-filter" class="filter-select">
+          Empresas: Todas
+        </button>
+        <div id="dropdown-empresa" class="multi-select-dropdown hidden">
+          <!-- preenchido via js -->
+        </div>
+      </div>
+
+      <select id="filter-range" class="filter-select" aria-label="Filtrar por período de atraso">
+        <option value="">Qualquer atraso</option>
+        <option value="today">Venceu hoje</option>
+        <option value="week">1 – 7 dias atrasada</option>
+        <option value="old">Mais de 7 dias</option>
+      </select>
+
+      <button id="btn-clear" class="btn btn--ghost btn--sm">Limpar filtros</button>
+    </div>
+  </section>
+
+  <!-- Main -->
+  <main class="main" id="main-content">
+    <!-- Loading -->
+    <div id="state-loading" class="empty-state">
+      <div class="spinner" aria-label="Carregando"></div>
+      <p class="empty-state__text">Buscando tarefas atrasadas…</p>
+    </div>
+
+    <!-- Empty -->
+    <div id="state-empty" class="empty-state hidden">
+      <div class="empty-state__icon">🎉</div>
+      <h2 class="empty-state__title">Nenhuma tarefa atrasada!</h2>
+      <p class="empty-state__text">A lista está em dia. Ótimo trabalho.</p>
+    </div>
+
+    <!-- Error -->
+    <div id="state-error" class="empty-state hidden">
+      <div class="empty-state__icon">⚠️</div>
+      <h2 class="empty-state__title">Erro ao carregar</h2>
+      <p class="empty-state__text" id="error-msg"></p>
+      <button onclick="loadTasks()" class="btn btn--primary">Tentar novamente</button>
+    </div>
+
+    <!-- Table -->
+    <div id="table-container" class="table-wrapper hidden">
+      <div class="table-header-row">
+        <span id="result-count" class="result-count"></span>
+      </div>
+      <table class="task-table" aria-label="Tarefas atrasadas">
+        <thead>
+          <tr>
+            <th class="col-task">Tarefa</th>
+            <th class="col-assignee">Responsável</th>
+            <th class="col-due">Vencimento</th>
+            <th class="col-overdue">Atraso</th>
+            <th class="col-actions">Ações</th>
+          </tr>
+        </thead>
+        <tbody id="task-tbody"></tbody>
+      </table>
+    </div>
+  </main>
+
+  <!-- Modal Reagendar -->
+  <div id="modal-reschedule" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal">
+      <div class="modal__header">
+        <h2 class="modal__title" id="modal-title">📅 Reagendar Tarefa</h2>
+        <button class="modal__close" id="modal-close" aria-label="Fechar">×</button>
+      </div>
+      <div class="modal__body">
+        <p class="modal__label">Tarefa</p>
+        <p class="modal__task-name" id="modal-task-name"></p>
+        <p class="modal__label" for="modal-date">Nova data de vencimento</p>
+        <input type="date" id="modal-date" class="modal__input" aria-label="Nova data de vencimento" />
+        <div class="preset-btns" role="group" aria-label="Atalhos de data">
+          <button class="preset-btn" data-days="1">+1 dia</button>
+          <button class="preset-btn" data-days="3">+3 dias</button>
+          <button class="preset-btn" data-days="7">+1 semana</button>
+          <button class="preset-btn" data-days="14">+2 semanas</button>
+          <button class="preset-btn" data-days="30">+1 mês</button>
+        </div>
+      </div>
+      <div class="modal__footer">
+        <button id="modal-cancel" class="btn btn--ghost">Cancelar</button>
+        <button id="modal-confirm" class="btn btn--primary">Salvar data</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast container -->
+  <div id="toast-container" class="toast-container" aria-live="polite"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
