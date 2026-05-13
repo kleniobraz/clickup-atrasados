@@ -68,7 +68,7 @@ app.get('/api/overdue', async (_req, res) => {
 // ── PUT arquivar tarefa (status = closed) ─────────────────────────────────
 app.put('/api/tasks/:id/archive', async (req, res) => {
   try {
-    await api.put(`/task/${req.params.id}`, { status: 'closed' });
+    await api.put(`/task/${req.params.id}`, { status: 'completo' });
     res.json({ ok: true });
   } catch (err) {
     const msg = err.response?.data?.err || err.message;
